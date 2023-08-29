@@ -56,6 +56,16 @@ describepod [-a | -n <namespace-query>] [pod-query]
                          If there is only one match then it is selected automatically.
 EOF
       ;;
+    viewsecret)
+      cat << EOF
+viewsecret [-a | -n <namespace-query>] [viewsecret-query]
+
+-a                    -  Search in all namespaces
+-h                    -  Show help
+-n <namespace-query>  -  Find namespaces matching <namespace-query> and do fzf.
+                         If there is only one match then it is selected automatically.
+EOF
+      ;;
   esac
 }
 
@@ -172,6 +182,42 @@ _kube_fzf_search_pod() {
   [ -z "$pod_name" ] && return 1
 
   echo "$namespace|$pod_name"
+}
+
+_kube_fzf_search_secret() {
+  local namespace secret_name
+  local namespace_query=$1
+  local secret_query=$2
+  local secret_fzf_args=$(_kube_fzf_fzf_args "$secret_query")
+
+  if [ -z "$namespace_query" ]; then
+      context=$(kubectl config current-context)
+      namespace=$(kubectl config get-contexts --no-headers $context \
+        | awk '{ print $5 }')
+
+      namespace=${namespace:=default}
+      secret_name=$(kubectl get secret --namespace=$namespace --no-headers \
+          | fzf $(echo $secret_fzf_args) \
+        | awk '{ print $1 }')
+  elif [ "$namespace_query" = "--all-namespaces" ]; then
+    read namespace secret_name <<< $(kubectl get secret --all-namespaces --no-headers \
+        | fzf $(echo $secret_fzf_args) \
+      | awk '{ print $1, $2 }')
+  else
+    local namespace_fzf_args=$(_kube_fzf_fzf_args "$namespace_query" "--select-1")
+    namespace=$(kubectl get namespaces --no-headers \
+        | fzf $(echo $namespace_fzf_args) \
+      | awk '{ print $1 }')
+
+    namespace=${namespace:=default}
+    secret_name=$(kubectl get secret --namespace=$namespace --no-headers \
+        | fzf $(echo $secret_fzf_args) \
+      | awk '{ print $1 }')
+  fi
+
+  [ -z "$secret_name" ] && return 1
+
+  echo "$namespace|$secret_name"
 }
 
 _kube_fzf_echo() {
